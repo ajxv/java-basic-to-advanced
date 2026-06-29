@@ -4,6 +4,14 @@
 
 ---
 
+## The Big Picture
+
+> **In plain terms** — Java didn't stop at Java 8. Since 2018 it ships a new version every six months, and the years since have steadily removed boilerplate and added safety: `records` (data classes in one line), `sealed` types (a fixed, known set of subtypes), pattern matching (test-and-extract in one step), text blocks (sane multi-line strings), and virtual threads (cheap concurrency). The throughline is "say more with less, and let the compiler check more for you."
+
+> **Why this matters** — Several of these features combine into a genuinely new style: `sealed` interfaces + `records` + pattern-matching `switch` let you model data and handle every case *exhaustively*, with the compiler erroring if you forget one — a functional "algebraic data type" approach that was awkward in old Java. Knowing what exists per version also guides practical choices: target an **LTS** release (8, 11, 17, 21), and reach for the modern construct (`record` over a hand-written DTO, `switch` patterns over `instanceof` chains) when it makes intent clearer.
+
+---
+
 ## Java 9 — Collection Factory Methods
 
 ```java
@@ -23,6 +31,10 @@ Map<String, Integer> bigMap = Map.ofEntries(
 // For a mutable copy:
 List<String> mutable = new ArrayList<>(names);
 ```
+
+> **In plain terms** — `List.of(...)`/`Set.of(...)`/`Map.of(...)` create small unmodifiable collections in one readable line — perfect for constants and test data. Covered in depth in [collections](../03-core-java/03-collections.md#immutable-collections-java-9); the takeaway here is just "this is the modern, concise way to make a fixed collection."
+
+> **Going deeper** — `Map.of` is overloaded up to 10 key/value pairs; beyond that use `Map.ofEntries`. These reject `null` elements and duplicate keys (fail-fast), and have no guaranteed iteration order (`Map.of` is deliberately randomized between runs to stop you depending on order). They're genuinely immutable, unlike the older `Collections.unmodifiableList` view.
 
 ---
 
@@ -44,6 +56,10 @@ for (var entry : map.entrySet()) {
 var x = process(data); // what type is x? Unclear without checking process()
 ```
 
+> **In plain terms** — `var` infers a local variable's type from the right side, cutting repetition (`var users = new HashMap<String, List<User>>()`). It's still fully, statically typed — just less typing. Full treatment in [variables & types](../01-basics/02-variables-and-types.md#var--type-inference-java-10); here it's listed as the Java 10 milestone.
+
+> **Going deeper** — `var` pairs especially well with the other modern features on this page: it shines on the long generic types and `record`/builder results common in modern code, and Java 11 even allows `var` in lambda parameters. Remember its limits — locals only, never fields/parameters/returns — and the readability rule: keep it where the type is obvious from the right-hand side.
+
 ---
 
 ## Java 11 — String and File Improvements
@@ -59,6 +75,10 @@ var x = process(data); // what type is x? Unclear without checking process()
 String content = Files.readString(Path.of("file.txt"));
 Files.writeString(Path.of("out.txt"), "hello");
 ```
+
+> **In plain terms** — Java 11 (the previous LTS, and still hugely common in industry) polished everyday APIs: `strip()`/`isBlank()`/`repeat()`/`lines()` on strings, and one-call file read/write. Small, but they remove boilerplate you used to write by hand. Details in [strings](../03-core-java/02-strings.md) and [file I/O](../05-advanced/01-file-io.md).
+
+> **Going deeper** — Java 11 also made `java SomeFile.java` run a single source file directly (no separate `javac` step) — great for scripts and learning. It's the version a *lot* of production still targets, so when writing libraries, check whether you can rely on 17/21 features or must stay 11-compatible.
 
 ---
 
@@ -114,6 +134,10 @@ public record UserEvent(String userId, String action, Instant timestamp)
 
 **When to use records:** Anywhere you'd write a plain data carrier class (DTOs, value objects, response/request objects, event payloads).
 
+> **In plain terms** — A `record` is a one-line way to declare an immutable "just holds data" class. You write `record Point(int x, int y) {}` and get the constructor, accessors, and correct `equals`/`hashCode`/`toString` for free — the 30 lines of boilerplate (and the bugs in hand-written `equals`) simply vanish. It's the modern default for DTOs, value objects, and event payloads.
+
+> **Going deeper** — Records are implicitly `final`, their fields are `final`, and they enforce *structural* equality (two records with equal components are equal) — exactly the [equals/hashCode contract](../02-oop/01-classes-and-objects.md#equals-and-hashcode) done right. The *compact constructor* (`public Range { ... }`, no parameter list) is the place for validation and normalization, running before the fields are assigned. Limits: a record can't extend a class (it already extends `Record`) but *can* implement interfaces, and it's for immutable data — if you need mutability or inheritance, use a regular class. Records also pair with sealed types and pattern matching (below) to form algebraic data types, and support *record patterns* (Java 21) for destructuring: `case Point(int x, int y) -> ...`.
+
 ---
 
 ## Java 16 — Pattern Matching for instanceof
@@ -133,6 +157,10 @@ if (obj instanceof String s) {
 // Also works in expressions:
 String result = (obj instanceof String s && s.length() > 5) ? s.toUpperCase() : "short";
 ```
+
+> **In plain terms** — Pattern matching merges the two steps you always did together — *check the type* and *cast to it* — into one. `if (obj instanceof String s)` both tests and gives you a ready `String s`, so you can't get the cast wrong and there's no redundant `(String) obj`.
+
+> **Going deeper** — The bound variable's scope is *flow-sensitive*: in `obj instanceof String s && s.length() > 5`, `s` is in scope for the right side of `&&` because that only runs when the test passed; and `if (!(obj instanceof String s)) return;` makes `s` available for the rest of the method. This is the same pattern-matching machinery that powers the `switch` patterns below — `instanceof` was just where it landed first. It makes the occasional, legitimate type-branch clean while the [polymorphism guidance](../02-oop/02-inheritance-and-polymorphism.md#instanceof-and-safe-casting) still applies: prefer overriding to type-switching where you can.
 
 ---
 
@@ -157,6 +185,10 @@ double area = switch (shape) {
 };
 ```
 
+> **In plain terms** — A `sealed` type declares *exactly* which classes are allowed to extend/implement it (`permits Circle, Rectangle, Triangle`). It's the opposite of an open interface anyone can implement: a closed, known set. The big payoff shows up in `switch` — the compiler knows the full list, so it can verify you handled every case and you can drop the `default`.
+
+> **Going deeper** — Sealed types let you express a real *closed* domain ("a payment is exactly Cash, Card, or Transfer") and get *exhaustiveness checking* for free: add a fourth subtype later and every `switch` that didn't handle it becomes a compile error, pointing you to each spot to update — a maintenance superpower over `if/else` or open hierarchies. Permitted subclasses must each be `final`, `sealed`, or `non-sealed` (explicitly reopening). Combined with `records`, this is Java's version of *algebraic data types* (sum types), and it's why the [switch in control flow](../01-basics/03-operators-and-control-flow.md#switch--old-vs-new) doc points here.
+
 ---
 
 ## Java 21 — Pattern Matching in Switch (Finalized)
@@ -174,6 +206,10 @@ String describe(Object obj) {
     };
 }
 ```
+
+> **In plain terms** — `switch` can now match on an object's *type* (not just int/String/enum), add `when` guards for extra conditions, and even handle `null` as a case. It turns long `if (x instanceof A) ... else if (x instanceof B) ...` chains into one clean, readable block that returns a value.
+
+> **Going deeper** — Order matters: cases are tried top-to-bottom, so put guarded/more-specific cases before their unguarded/general versions (the compiler rejects a dominated case). Over a [sealed type](#java-17--sealed-classes) the switch is *exhaustive* without a `default`; over open types you still need one. Combined with *record patterns* you can destructure in the case label itself — `case Point(int x, int y) when x == y -> "diagonal"` — extracting fields and testing them in one line. Handling `null` as an explicit `case null` is opt-in; without it, a null still throws `NullPointerException` as before, preserving old behavior.
 
 ---
 
@@ -209,6 +245,10 @@ try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
 // Requires: Java 21+, no Thread.sleep() in synchronized blocks
 ```
 
+> **In plain terms** — A virtual thread looks and codes *exactly* like a normal thread, but it's almost free. The JVM can run millions of them, so instead of clever async/callback code, you can write plain blocking code ("call the database, wait for the answer") for each request and just spin up a virtual thread per task. Simple thread-per-request code that finally scales.
+
+> **Going deeper** — The trick: when a virtual thread blocks on I/O, the JVM *unmounts* it from its underlying OS "carrier" thread and parks it cheaply, freeing the OS thread to run another virtual thread — so a few OS threads serve millions of virtual ones. This makes the simple blocking style competitive with reactive/async frameworks, without their complexity. Caveats matter: virtual threads help *I/O-bound* work, not CPU-bound (you still only have N cores); pre-Java-24, holding a `synchronized` lock or a native call across a blocking point "pins" the carrier thread and kills the benefit (use `ReentrantLock` instead); and you should never *pool* virtual threads — create one per task (`newVirtualThreadPerTaskExecutor`). See [multithreading](../05-advanced/02-multithreading.md) for the threading model they build on.
+
 ---
 
 ## Java 14 — Text Blocks
@@ -238,6 +278,10 @@ String sql = """
         """;
 ```
 
+> **In plain terms** — Text blocks (`"""..."""`) let you write multi-line strings — JSON, SQL, HTML — exactly as they look, without `\n` and escaped quotes everywhere. Covered with the formatting gotchas in [strings](../03-core-java/02-strings.md#string-formatting); listed here as the Java 15 milestone.
+
+> **Going deeper** — The indentation rule is the one thing to internalize: Java strips the *common* leading whitespace, measured from the least-indented line (often the closing `"""`), so you indent the block to match surrounding code without that indentation leaking into the value. Combine with `.formatted(...)` for templating. They're a quality-of-life win especially in tests and embedded queries.
+
 ---
 
 ## Quick Version Cheat Sheet
@@ -255,3 +299,7 @@ String sql = """
 | Java 21 | Virtual threads, switch patterns (LTS) |
 
 **Recommendation:** Use Java 21 (LTS) for new projects. Most enterprise projects run on 11 or 17.
+
+> **In plain terms** — Java ships a release every 6 months, but most of those are short-lived. The ones to care about are **LTS** (Long-Term Support) versions — 8, 11, 17, 21 — which get years of updates and are what companies actually standardize on. Pick the latest LTS you can; jump on by LTS, not by every six-month release.
+
+> **Going deeper** — LTS releases get ~8 years of vendor support (Oracle, plus free builds like Eclipse Temurin/Adoptium), so they're the safe production target; interim releases (18, 19, 20…) are fine for trying features but lose support fast. Features often arrive as *preview* (enable with `--enable-preview`, may change) before finalizing in a later release — records and pattern matching both took this path. When choosing a target version, weigh the libraries/runtime you must support against the modern features you'd gain; greenfield → newest LTS (21), existing systems → match what's deployed (often 11 or 17).

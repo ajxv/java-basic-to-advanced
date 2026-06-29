@@ -4,6 +4,14 @@
 
 ---
 
+## The Big Picture
+
+> **In plain terms** — A `String` is a piece of text, and the single most important fact about it is that it's **immutable**: once created, its characters never change. Every method that "modifies" a string (`toUpperCase`, `replace`, `trim`) actually returns a *brand-new* string and leaves the original untouched. Almost every string surprise — "why didn't my change stick?", "why is `==` false?", "why is my loop slow?" — traces back to that one property.
+
+> **Why this matters** — Immutability is a deliberate trade. The upside is huge: strings are automatically thread-safe, safe to use as `Map` keys, and cacheable (the String Pool). The downside is that building strings by repeated concatenation creates mountains of throwaway objects — which is why `StringBuilder` exists for heavy text building. Get immutability, the pool, and `StringBuilder` straight, and strings stop being mysterious.
+
+---
+
 ## Immutability — The Root of Most String Confusion
 
 `String` objects in Java are **immutable**. Every "modification" creates a new object.
@@ -18,6 +26,10 @@ System.out.println(s);  // "HELLO"
 ```
 
 Immutability makes strings safe to share across threads and in hash maps, but means you must always reassign to see the result.
+
+> **In plain terms** — Think of a string as written in permanent ink. `s.toUpperCase()` doesn't edit `s` — it photocopies the text, uppercases the copy, and hands you the copy. If you don't catch that copy (`s = s.toUpperCase()`), it's lost and `s` still says "hello." Beginners trip on this constantly because it *looks* like a method that changes `s`.
+
+> **Going deeper** — Immutability is what makes a string's `hashCode` cacheable (computed once, reused forever — great for `HashMap` keys) and what makes sharing across threads safe with zero locking. Internally a `String` wraps a private `final byte[]` (since Java 9, *Compact Strings* store Latin-1 text in 1 byte/char instead of 2, halving memory for typical ASCII). Security APIs deliberately use `char[]` for passwords instead of `String` precisely *because* you can zero out a `char[]` after use, but an immutable `String` lingers in memory (and possibly the pool) until GC.
 
 ---
 
@@ -37,6 +49,10 @@ System.out.println(c.intern() == a);  // true — intern() adds c to pool
 ```
 
 **Rule:** Use `.equals()` to compare content. Never use `==` on strings except by accident.
+
+> **In plain terms** — Because the same literal text appears all over a program, Java stores one shared copy of each *literal* in a "pool" and reuses it — so `"hello" == "hello"` happens to be `true`. But `new String("hello")` forces a separate object, so `==` is `false` even though the text matches. The lesson isn't "learn the pool rules" — it's "never compare string content with `==`; always use `.equals()`."
+
+> **Going deeper** — Only *compile-time constant* strings are auto-pooled; values computed at runtime (concatenation of variables, `new String(...)`) land on the regular heap and must be `.intern()`-ed to join the pool. `intern()` can save memory when you have massive numbers of duplicate runtime strings, but it's a sharp tool — interned strings live a long time and the pool itself is a `HashMap`, so over-interning can hurt. The String Pool lives in the regular heap (since Java 7; it was in PermGen before), so it's garbage-collected like anything else.
 
 ---
 
@@ -68,6 +84,10 @@ String formatted = new StringBuilder()
 
 **Note:** For simple single-line concatenation (outside loops), the compiler converts it to StringBuilder automatically — no need to do it manually.
 
+> **In plain terms** — Because each `+=` on a string makes a *whole new string*, doing it inside a loop is like rewriting an entire document every time you add a word — work piles up fast. `StringBuilder` is a mutable scratchpad: it appends into one growing buffer and you call `toString()` once at the end. Use it whenever you're assembling text in a loop.
+
+> **Going deeper** — The "O(n²)" warning is real: n concatenations copy ~n²/2 characters total. `StringBuilder` amortizes to O(n) by doubling its internal array as needed — preallocate with `new StringBuilder(expectedSize)` to skip the regrowth copies. The compiler optimizes simple `a + b + c` into a single builder (modern JDKs use the even faster `invokedynamic`/`StringConcatFactory`), so manual builders for one-liners add no value. Two more notes: `StringBuilder` is *not* thread-safe (its synchronized cousin `StringBuffer` is, but you almost never need it); and inside a stream, `Collectors.joining()` beats a manual builder.
+
 ---
 
 ## String Formatting
@@ -90,6 +110,10 @@ String json = """
 // Formatted (Java 15+, on String itself)
 String msg2 = "User %s has %d points".formatted(username, points);
 ```
+
+> **In plain terms** — Pick by the job: `+` for quick joins, `String.format`/`.formatted` when you want a template with placeholders (`%s`, `%d`), and **text blocks** (`"""..."""`) for multi-line content like JSON or SQL where escaping quotes and newlines by hand is miserable.
+
+> **Going deeper** — `%`-format placeholders are powerful (width, precision, locale: `%,.2f` → `1,234.57`) but unchecked at compile time — a type mismatch throws at runtime, so reserve `format` for genuine templating, not hot loops. Text blocks strip *incidental* leading whitespace based on the closing `"""` position, so indentation is determined by alignment, not luck. Note: the older "String Templates" preview (`STR."..."`) was *removed* and reworked, so for now stick to `formatted`/text blocks. For user-facing localized messages, `MessageFormat`/resource bundles beat hard-coded format strings.
 
 ---
 
@@ -149,6 +173,10 @@ String.valueOf(true)        // "true"
 Integer.toString(42)        // "42"
 ```
 
+> **In plain terms** — You don't need to memorize these — just know the categories (trim, case, search, extract, replace, split, check, join) so you know what to reach for. A couple of modern favorites: `strip()` over the older `trim()` (it understands Unicode whitespace), and `isBlank()` to catch strings that are empty *or* only spaces.
+
+> **Going deeper** — Watch the gotchas: `replace` takes literal text, but `replaceAll`/`matches`/`split` take **regex**, so `"a.b".split(".")` returns nothing (`.` matches everything) — escape it as `"\\."`. `substring`'s end index is *exclusive*. `split` drops trailing empty strings unless you pass a negative limit. `indexOf` returns `-1` when not found (not an exception). And `toLowerCase()`/`toUpperCase()` are locale-sensitive — the infamous "Turkish-I" bug means you should use `toLowerCase(Locale.ROOT)` for case-insensitive *logic* (keys, protocol tokens) rather than display.
+
 ---
 
 ## Null-Safe Comparison
@@ -166,6 +194,10 @@ s1.equals(s2); // NullPointerException!
 // Or use Objects.equals (null-safe):
 Objects.equals(s1, s2); // returns false if either is null, true if both null
 ```
+
+> **In plain terms** — Calling `.equals()` on a possibly-null variable crashes. Flip it so the *known* value goes first (`"expected".equals(input)`) — a constant is never null, so it can't throw — or use `Objects.equals(a, b)`, which safely handles nulls on either side.
+
+> **Going deeper** — The `"literal".equals(var)` idiom (sometimes called a "Yoda condition") trades a little readability for guaranteed null-safety and is widely used in defensive code. `Objects.equals` is the cleaner choice when *both* sides might be null. For case-insensitive comparison use `equalsIgnoreCase` rather than lowercasing both sides (it avoids allocating two new strings and the locale pitfalls noted above).
 
 ---
 
@@ -185,6 +217,10 @@ words.sort(String.CASE_INSENSITIVE_ORDER);
 // By length then alphabetical:
 words.sort(Comparator.comparingInt(String::length).thenComparing(Comparator.naturalOrder()));
 ```
+
+> **In plain terms** — Default string sorting is by character codes, so uppercase letters sort *before* lowercase ones (`"Apple"` before `"banana"`) — usually not what a human expects. Use `String.CASE_INSENSITIVE_ORDER` for human-friendly order, and chain `Comparator` methods (`comparingInt(...).thenComparing(...)`) to sort by length, then alphabetically, etc.
+
+> **Going deeper** — Character-code ordering is *lexicographic by UTF-16 code unit*, which also mis-sorts accented characters and non-English text — for real human-language sorting use `java.text.Collator` with a `Locale`. The `Comparator` builder methods (`comparing`, `thenComparing`, `reversed`, `nullsFirst`) are the same fluent toolkit you'll use everywhere objects are sorted — see [collections](03-collections.md) and [lambdas](../04-java8-modern/01-lambdas-and-functional.md). Sorting is `O(n log n)`, so for "top 3" prefer a partial approach over a full sort.
 
 ---
 
@@ -212,3 +248,7 @@ if (input.matches("-?\\d+")) {
 String s = String.valueOf(42);   // "42"
 String s2 = 42 + "";            // "42" — works but less clear
 ```
+
+> **In plain terms** — Turning `"42"` into a number uses `Integer.parseInt` (and its `Double`/`Long` cousins), but if the text isn't a valid number it throws `NumberFormatException`. So either validate first or wrap the parse in a try/catch — never assume user input is well-formed.
+
+> **Going deeper** — `parseInt` is strict: leading/trailing spaces, commas, `+`/underscores, or empty strings all throw — `strip()` first if needed, and remember it also throws on values outside `int` range. Per the [exceptions guide](01-exception-handling.md#exception-best-practices), avoid using the `catch` as routine flow control on hot paths (each throw builds a stack trace); validate with a regex or a small tolerant parser when invalid input is *expected*. For locale-aware parsing of grouped numbers (`"1,234.56"`), use `NumberFormat`; for money, parse into `BigDecimal`, not `double`.

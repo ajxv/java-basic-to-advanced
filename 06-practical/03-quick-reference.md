@@ -4,6 +4,14 @@ For the moments when you need a fast answer.
 
 ---
 
+## The Big Picture
+
+> **In plain terms** — This page is a lookup table, not a tutorial — skim it when you're mid-task and need to decide *which collection*, *which number type*, *which exception*, or *what that error means*. Each section distills decisions covered in depth elsewhere in the guide into a one-glance answer. Bookmark it; the goal is to get you unstuck in seconds.
+
+> **How to use it** — When you hit a fork ("List or Set? `int` or `long`? checked or unchecked?"), find the matching decision tree, take the answer, and move on. If the *why* behind a choice is unclear, follow back to the full chapter — debugging to [exceptions](../03-core-java/01-exception-handling.md), collections to [collections](../03-core-java/03-collections.md), concurrency to [multithreading](../05-advanced/02-multithreading.md). Reference beats memorization: even experienced developers look these up rather than trusting recall.
+
+---
+
 ## Debugging Checklist — When Code is Broken
 
 1. **NullPointerException** → Something is null. Add null check, use `Optional`, or use `Objects.requireNonNull()` at method entry.
@@ -13,6 +21,10 @@ For the moments when you need a fast answer.
 5. **StackOverflowError** → Infinite recursion. Check your base case.
 6. **OutOfMemoryError** → Heap exhausted. Check for memory leaks, increase `-Xmx`, or fix the leak.
 7. **Result is wrong but no exception** → Integer overflow? Floating-point imprecision? Wrong type casting?
+
+> **In plain terms** — Most Java exceptions name their own cause if you read them: the *type* tells you the category of bug and the message (especially [helpful NPE messages](../03-core-java/01-exception-handling.md#nullpointerexception--diagnosing-the-fix)) tells you the spot. Start at the *bottom* of the stack trace's `Caused by:` chain — that's the true origin — then work up.
+
+> **Going deeper** — Note the split: items 1-6 *throw* (the JVM tells you something's wrong), but item 7 is the dangerous one — *silent* wrong answers from [integer overflow](../01-basics/02-variables-and-types.md#integer-overflow--silent-and-dangerous), [floating-point imprecision](../01-basics/02-variables-and-types.md#the-floating-point-trap), or truncating casts, which no exception flags. Those need tests and code review to catch, not stack traces. Reproduce reliably before fixing, and add a regression test so the bug can't return.
 
 ---
 
@@ -86,6 +98,10 @@ Background async work, don't want to block?
 I/O bound with many concurrent tasks (Java 21)?
   └── Virtual threads (Executors.newVirtualThreadPerTaskExecutor())
 ```
+
+> **In plain terms** — Read this tree top-down — it escalates from cheapest to most involved. The best answer is the first one: *immutable, read-only state needs no synchronization at all*. Only when you genuinely share *mutable* state do you climb to atomics, then locks, then concurrent collections.
+
+> **Going deeper** — The tree encodes the [multithreading](../05-advanced/02-multithreading.md) golden rule: prefer not sharing mutable state over coordinating it. Match the tool to the shape of the problem — *one* variable → atomic; *several related* fields → a lock (atomics can't make a multi-field update consistent); a *map* → `ConcurrentHashMap`; *async composition* → `CompletableFuture`. When in doubt, immutability and message-passing sidestep the whole hierarchy.
 
 ---
 
@@ -200,6 +216,10 @@ public String toString() {
 
 // Or: use a Record and get all three for free
 ```
+
+> **In plain terms** — This is the copy-paste template for the most error-prone bit of OOP. The non-negotiable rule: **`equals` and `hashCode` always travel together** — override one, override both, or hash-based collections silently misbehave. The clean modern escape is to make the class a [`record`](../04-java8-modern/04-modern-java-9-to-21.md#java-14--records), which generates all three correctly.
+
+> **Going deeper** — The template's order matters: the `this == o` shortcut is a fast path, the `instanceof` pattern handles both null and wrong-type in one check (and binds `other`), and `Objects.equals`/`Objects.hash` handle null fields. Include in `equals`/`hashCode` only the fields that define *identity*, and avoid *mutable* fields — mutating an object after it's in a `HashSet` corrupts the set. See the full [equals/hashCode contract](../02-oop/01-classes-and-objects.md#equals-and-hashcode) for the reflexive/symmetric/transitive rules.
 
 ---
 

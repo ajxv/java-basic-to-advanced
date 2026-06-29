@@ -6,6 +6,14 @@ Patterns are reusable solutions to common design problems. Learn to recognize th
 
 ---
 
+## The Big Picture
+
+> **In plain terms** — Design patterns are *named, proven solutions* to problems that show up again and again in software. They're not libraries you import — they're shapes you recognize. The value is twofold: they save you from reinventing a solution, and they give teams a shared vocabulary ("let's make that a Strategy") that conveys a whole design in one word. The patterns in this doc are the handful you'll genuinely meet in everyday Java.
+
+> **Why this matters** — Used well, patterns make code flexible exactly where it needs to flex (swap an algorithm, add a behavior, hide a data source). Used badly — forced in where a simpler solution fits — they add ceremony and indirection for no gain. So the skill isn't memorizing 23 patterns; it's recognizing the *problem* first ("I have many optional constructor params," "I need to swap behavior at runtime") and reaching for the pattern only when it earns its keep. Notice, too, that lambdas and interfaces ([part 4](../04-java8-modern/01-lambdas-and-functional.md), [interfaces](../02-oop/03-interfaces-and-abstract-classes.md)) have made several classic patterns nearly disappear into one-liners.
+
+---
+
 ## Singleton — One Instance Only
 
 **Problem:** You need exactly one instance of a class (config, connection pool, registry).
@@ -41,6 +49,10 @@ public enum DatabasePool {
     public DataSource get() { return dataSource; }
 }
 ```
+
+> **In plain terms** — A Singleton guarantees there's exactly *one* instance of something (a config holder, a connection pool) and gives everyone a shared way to reach it. The two safe ways in Java are the *holder idiom* (lazy, thread-safe via class-loading rules) and — simplest of all — an `enum` with one constant, which the JVM guarantees is a single instance.
+
+> **Going deeper** — Why `enum` is the gold standard (per *Effective Java*): the JVM handles thread-safe lazy init *and* protects against the two ways other singletons break — reflection (can't `new` an enum) and deserialization (enums deserialize to the same instance). The holder idiom works because a class isn't initialized until first referenced, so `Holder.INSTANCE` is created lazily and thread-safely with zero locking. Caveat: Singleton is the most *overused* pattern — it's global mutable state in disguise, which hurts testability and hides dependencies. In modern apps, prefer a *dependency-injection* container (Spring) to manage single instances and inject them, rather than a hard-coded `getInstance()` callers can't substitute in tests.
 
 ---
 
@@ -98,6 +110,10 @@ EmailMessage email = new EmailMessage.Builder("alice@example.com", "Hello!")
     .build();
 ```
 
+> **In plain terms** — When a class has lots of parameters — especially optional ones — a constructor like `new EmailMessage(to, subj, body, cc, att, true)` is unreadable and easy to get wrong (which `true` was that?). A Builder lets you set only what you need by name, in any order, ending with `.build()`. The result reads like a sentence and makes the final object immutable.
+
+> **Going deeper** — The Builder solves the *telescoping constructor* problem (a ladder of overloads for every combo) and the *JavaBeans* problem (setters leave the object mutable and temporarily invalid). Required fields go in the builder's constructor (fail fast if missing); optional ones get fluent setters returning `this`. Validation lives in `build()`. You rarely hand-write builders anymore: Lombok's `@Builder` generates one, and for plain immutable data a [`record`](../04-java8-modern/04-modern-java-9-to-21.md#java-14--records) replaces the need entirely (use a builder only when you have many *optional* params). This also pairs with the "keep parameter lists short" advice from [methods](../01-basics/04-methods.md#method-design-tips).
+
 ---
 
 ## Factory — Decouple Creation from Use
@@ -130,6 +146,10 @@ NotificationSender sender = NotificationSenderFactory.create(config.getChannel()
 sender.send(user.getEmail(), "Your order shipped!");
 // Easy to add new channels without changing callers
 ```
+
+> **In plain terms** — A Factory is one central place that decides *which* concrete class to create, so the rest of your code asks for "a notification sender" without knowing or caring whether it's email, SMS, or push. Add a new channel and you change the factory only — every caller keeps working unchanged.
+
+> **Going deeper** — This is *programming to an interface*: callers depend on `NotificationSender`, not its implementations (the dependency-inversion seam from [interfaces](../02-oop/03-interfaces-and-abstract-classes.md)). Factories also give you a natural spot for centralized concerns — caching instances, reading config, wiring dependencies. "Factory" spans a few variants: a simple static factory *method* (`Optional.of`, `List.of`), this parameterized factory, and the full *Abstract Factory* (a family of related factories). Don't over-engineer — a static method is often plenty, and DI frameworks subsume much of this in real apps.
 
 ---
 
@@ -171,6 +191,10 @@ order.setPricingStrategy(bulk);
 order.total(10.0, 15); // 135.0 (10% discount)
 ```
 
+> **In plain terms** — Strategy lets you swap *how* something is done at runtime. An `Order` doesn't hard-code its pricing math; it holds a `PricingStrategy` you can change (regular, bulk, employee). Each strategy is interchangeable because they share one interface. Notice each is just a lambda — in modern Java, Strategy is often "pass a function."
+
+> **Going deeper** — Strategy is the antidote to sprawling `if/else`/`switch` chains that branch on a "type" or "mode" — instead of editing that switch every time, you add a new strategy object. Because a [functional interface](../02-oop/03-interfaces-and-abstract-classes.md#functional-interfaces) + lambda *is* a strategy, much of the classic boilerplate vanished in Java 8 — `Comparator` passed to `sort` is Strategy, every `Function`/`Predicate` you pass to a [stream](../04-java8-modern/02-streams.md) is Strategy. Keep strategies stateless and you can share/cache single instances. The line between Strategy and a plain callback is mostly intent: Strategy names a *family* of interchangeable algorithms for one well-defined job.
+
 ---
 
 ## Observer — Event Notification
@@ -208,6 +232,10 @@ bus.subscribe(event -> analyticsService.track(event));
 bus.publish(new OrderPlacedEvent("ORD-001", "USR-123", 99.99));
 // All three listeners are notified automatically
 ```
+
+> **In plain terms** — Observer lets one thing announce "this happened!" and any number of interested parties react — without the announcer knowing who's listening. When an order is placed, the email, inventory, and analytics services all respond, but the order code just calls `publish`. You can add or remove listeners freely; the publisher is untouched.
+
+> **Going deeper** — This decouples *what happened* from *what to do about it* — the foundation of event-driven architecture, UI frameworks, and pub/sub messaging. Real-world cautions: listener references are a classic [memory leak](03-memory-and-gc.md#2-event-listeners-not-removed) (always provide `unsubscribe`), notification order isn't guaranteed, and one slow or throwing listener can block the rest (note the `CopyOnWriteArrayList` here makes iteration thread-safe during concurrent subscribe/unsubscribe). For anything serious, lean on existing infrastructure — Spring's `ApplicationEvent`, a message broker (Kafka/RabbitMQ), or `java.util.concurrent.Flow` (reactive streams) — rather than a hand-rolled bus.
 
 ---
 
@@ -260,6 +288,10 @@ source.write("secret data"); // compress → encrypt → write to file
 source.read();               // read → decrypt → decompress
 ```
 
+> **In plain terms** — A Decorator wraps an object in another object that shares the same interface, adding behavior before/after delegating to the wrapped one. Because each layer has the same type, you can stack them like Russian dolls — wrap a file source in compression, then in encryption — and combine features without writing a class for every combination.
+
+> **Going deeper** — Decorator is *composition over inheritance* in action: instead of a class explosion (`EncryptedCompressedFileSource`...), you compose small wrappers at runtime in any order. You've used it without naming it — `new BufferedReader(new InputStreamReader(inputStream))` is the JDK's I/O layering, the textbook example. Trade-offs: many thin layers can make stack traces and debugging noisier, and the order of wrapping matters (encrypt-then-compress vs compress-then-encrypt behave differently). Keep each decorator focused on one concern and faithful to the wrapped contract.
+
 ---
 
 ## Repository — Separate Data Access
@@ -311,3 +343,7 @@ public class InMemoryUserRepository implements UserRepository {
     // ...
 }
 ```
+
+> **In plain terms** — A Repository hides *where and how* data is stored behind a plain interface of operations (`findById`, `save`, `delete`). Your business logic talks to `UserRepository` and never sees SQL or connections. The payoff is huge for testing: swap the real JDBC implementation for a simple in-memory `Map` and your service tests run instantly with no database.
+
+> **Going deeper** — Repository keeps persistence concerns out of your domain logic (separation of concerns) and makes the data layer swappable (JDBC today, a different store tomorrow) — it's essentially the [interface-driven testability](../02-oop/03-interfaces-and-abstract-classes.md) seam applied to data access. It builds on [exceptions](../03-core-java/01-exception-handling.md) (translate `SQLException` into domain exceptions so callers don't depend on JDBC) and [`Optional`](../04-java8-modern/03-optional.md) (return `Optional<User>` for "might not exist"). In practice, Spring Data generates the implementation from the interface alone — you declare `findByDepartment` and it writes the query — which is this pattern taken to its logical conclusion. Keep repositories focused on persistence; business rules belong in the service layer above.
